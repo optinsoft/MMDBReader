@@ -27,7 +27,7 @@ begin
  try
    LIPAddress := TMMDBIPAddress.Parse('8.8.8.8');
    if LMMDBReader.Find<TMMDBIPInfo>(LIPAddress, prefixLength, LIPInfo) then
-     ShowMessage(Format('country_iso_code: "%s", country_geoname_id: %s', [LIPInfo.Country.ISOCode, IntToStr(LIPInfo.country.GeonameId)]));
+     ShowMessage(Format('country_iso_code: "%s", country_geoname_id: %s', [LIPInfo.Country.ISOCode, IntToStr(LIPInfo.country.GeonameId)]))
    else
      ShowMessage('Not found');
  finally
