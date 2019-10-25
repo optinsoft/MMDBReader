@@ -8,10 +8,6 @@ This distribution provides a Delphi reader for the MaxMind DB file format.
 
 Delphi 10.2 Tokyo or newer.
 
-## Dependencies
-
-BigNumbers by Rudy Velthuis (https://github.com/rvelthuis/DelphiBigNumbers).
-
 ## Usage
 ```pascal
 uses uMMDBReader;
@@ -38,9 +34,11 @@ end;
 ```
 ## License
 
-This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
-Unported License. To view a copy of this license, visit
-http://creativecommons.org/licenses/by-sa/3.0/.
+Free to use, free to modify.
+
+## Dependencies
+
+BigNumbers by Rudy Velthuis (https://github.com/rvelthuis/DelphiBigNumbers).
 
 ## Contributions
 
