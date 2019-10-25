@@ -13,7 +13,7 @@
 { Date: August 27, 2010                                                       }
 { Version: 1.2                                                                }
 {                                                                             }
-{ Modified by Vitaly, Opt-In Software                                         }
+{ Modified by Vitaly Yakovlev                                                 }
 { Website: http://optinsoft.net/                                              }
 { Date: October 22, 2019                                                      }
 {                                                                             }

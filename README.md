@@ -34,7 +34,7 @@ end;
 ```
 ## License
 
-Free to use, free to modify.
+BSD 2-Clause License.
 
 ## Dependencies
 
