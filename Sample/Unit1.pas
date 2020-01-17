@@ -3,6 +3,7 @@
 { Sample for the MMDB Reader project                                           }
 {                                                                              }
 { Created by Vitaly Yakovlev                                                   }
+{ Date: October 22, 2019                                                       }
 { Copyright: (c) 2019 Vitaly Yakovlev                                          }
 { Website: http://optinsoft.net/                                               }
 {                                                                              }
@@ -31,8 +32,16 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: October 22, 2019                                                       }
-{ Version: 1.0                                                                 }
+{ Date: January 16, 2020                                                       }
+{ Version: 1.1                                                                 }
+{                                                                              }
+{ Changelog:                                                                   }
+{                                                                              }
+{ v1.1:                                                                        }
+{ - added reading of City mmdb                                                 }
+{                                                                              }
+{ v1.0:                                                                        }
+{ - Initial release                                                            }
 {                                                                              }
 { **************************************************************************** }
 
@@ -52,6 +61,9 @@ type
     Edit1: TEdit;
     Label1: TLabel;
     Button2: TButton;
+    Edit2: TEdit;
+    Label2: TLabel;
+    CheckBox1: TCheckBox;
     procedure Button1Click(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure Button2Click(Sender: TObject);
@@ -71,7 +83,7 @@ implementation
 
 uses
   uMMDBInfo, uMMDBIPAddress, System.Generics.Collections,
-  System.DateUtils;
+  System.DateUtils, System.StrUtils;
 
 {$IFDEF DEBUG}
 {.$DEFINE DEBUG_IP}
@@ -82,7 +94,10 @@ uses
 procedure TForm1.Button1Click(Sender: TObject);
 begin
   if OpenDialog1.Execute then
+  begin
+    Caption := 'MMDB Reader Sample: '+OpenDialog1.FileName;
     ReadMMDB(OpenDialog1.FileName);
+  end;
 end;
 
 procedure TForm1.Button2Click(Sender: TObject);
@@ -108,7 +123,7 @@ const
   DEBUG_IPv6 = '2001:4860:4860::8844';
 {$ENDIF}
 
-  procedure PrintNode(node: TMMDBIteratorNode<TMMDBIPInfo>);
+  function FormatIPCountryNode(node: TMMDBIteratorNode<TMMDBIPCountryInfo>): String;
   var
     netAddress: TMMDBIPAddress;
     rawAddress: TBytes;
@@ -126,18 +141,49 @@ const
       i := ((i shr 3) shl 3) + 8;
     end;
     netAddress := TMMDBIPAddress.Create(rawAddress);
-    LLines.Add(Format('%s/%d,%s,%s,%s,%s,%s,%s',
+    Result := Format('%s/%d,%s,%s,%s,%s,%s,%s',
       [netAddress.ToString, node.Prefix,
        node.Data.Continent.code, IntToStr(node.Data.Continent.GeonameId),
        node.Data.Country.ISOCode, IntToStr(node.Data.Country.GeonameId),
-       node.Data.RegisteredCountry.ISOCode, IntToStr(node.Data.RegisteredCountry.GeonameId)]));
+       node.Data.RegisteredCountry.ISOCode, IntToStr(node.Data.RegisteredCountry.GeonameId)]);
+  end;
+
+  function FormatIPCountryCityNode(node: TMMDBIteratorNode<TMMDBIPCountryCityInfoEx>): String;
+  var
+    netAddress: TMMDBIPAddress;
+    rawAddress: TBytes;
+    bitLength: Integer;
+    i, h: Integer;
+  begin
+    rawAddress := node.Start.GetAddressBytes;
+    bitLength := Length(rawAddress) * 8;
+    i := node.Prefix;
+    while i < bitLength do
+    begin
+      h := 8 - (i mod 8);
+      rawAddress[i shr 3] :=
+        (rawAddress[i shr 3] shr h) shl h;
+      i := ((i shr 3) shl 3) + 8;
+    end;
+    netAddress := TMMDBIPAddress.Create(rawAddress);
+    Result := Format('%s/%d,%s,%s,%s,%s,%s,%s,%s,%s',
+      [netAddress.ToString, node.Prefix,
+       node.Data.Continent.code, IntToStr(node.Data.Continent.GeonameId),
+       node.Data.Country.ISOCode, IntToStr(node.Data.Country.GeonameId),
+       node.Data.RegisteredCountry.ISOCode, IntToStr(node.Data.RegisteredCountry.GeonameId),
+       IntToStr(node.Data.City.GeonameId), node.Data.City.Names['en']]);
   end;
 
 var
 //  ipInfo: TMMDBIPInfo;
 //  enumerator: IEnumerator<TMMDBIteratorNode<TMMDBIPInfo>>;
-  iterator: IMMDBIterator<TMMDBIPInfo>;
+  countryIterator: IMMDBIterator<TMMDBIPCountryInfo>;
+  cityIterator: IMMDBIterator<TMMDBIPCountryCityInfoEx>;
+  displayLinesCount: Integer;
+  IPv4Only: Boolean;
 begin
+  displayLinesCount := StrToInt(Edit2.Text);
+  IPv4Only := CheckBox1.Checked;
   LLines := Memo1.Lines;
   LLines.Clear;
   if Assigned(FMMDBReader) then FreeAndNil(FMMDBReader);
@@ -161,11 +207,22 @@ begin
     TestIP(DEBUG_IPv4, 'DEBUG_IP_');
     TestIP(DEBUG_IPv6, 'DEBUG_IP_');
 {$ENDIF}
-    LLines.Add('network,continent_code,continent_geoname_id,country_iso_code,country_geoname_id,registered_country_iso_code,registered_country_geoname_id');
-    for iterator in FMMDBReader.FindAll<TMMDBIPInfo>(True{IPv4Only}) do
+    if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
     begin
-      PrintNode(iterator.Node);
-      if LLines.Count >= 1000 then Break;
+      LLines.Add('network,continent_code,continent_geoname_id,country_iso_code,country_geoname_id,registered_country_iso_code,registered_country_geoname_id,city_geoname_id,city_names_en');
+      for cityIterator in FMMDBReader.FindAll<TMMDBIPCountryCityInfoEx>(IPv4Only) do
+      begin
+        LLines.Add(FormatIPCountryCityNode(cityIterator.Node));
+        if LLines.Count >= displayLinesCount then Break;
+      end;
+    end else
+    begin
+      LLines.Add('network,continent_code,continent_geoname_id,country_iso_code,country_geoname_id,registered_country_iso_code,registered_country_geoname_id');
+      for countryIterator in FMMDBReader.FindAll<TMMDBIPCountryInfo>(IPv4Only) do
+      begin
+        LLines.Add(FormatIPCountryNode(countryIterator.Node));
+        if LLines.Count >= displayLinesCount then Break;
+      end;
     end;
   finally
     LLines.EndUpdate;
@@ -181,8 +238,13 @@ var
   bitLength: Integer;
   ipVersion: Integer;
   prefixLength: Integer;
-  ipInfo: TMMDBIPInfo;
-  i, h: Integer;
+  ipCountryInfo: TMMDBIPCountryInfoEx;
+  ipCityInfo: TMMDBIPCountryCityInfoEx;
+  ipInfo: TMMDBIPCountryInfoEx;
+  ipInfoFound: Boolean;
+  i, j, h: Integer;
+  s: String;
+  nameKey: String;
 begin
   LLines := Memo1.Lines;
   ipAddress := TMMDBIPAddress.Parse(ipString);
@@ -192,9 +254,14 @@ begin
     ipVersion := 6
   else
     ipVersion := 4;
-  ipInfo := TMMDBIPInfo.Create;
+  ipCountryInfo := TMMDBIPCountryInfoEx.Create;
+  ipCityInfo := TMMDBIPCountryCityInfoEx.Create;
   try
-    if FMMDBReader.Find<TMMDBIPInfo>(ipAddress, prefixLength, ipInfo) then
+    if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
+      ipInfoFound := FMMDBReader.Find<TMMDBIPCountryCityInfoEx>(ipAddress, prefixLength, ipCityInfo)
+    else
+      ipInfoFound := FMMDBReader.Find<TMMDBIPCountryInfoEx>(ipAddress, prefixLength, ipCountryInfo);
+    if ipInfoFound then
     begin
       i := prefixLength;
       while i < bitLength do
@@ -205,16 +272,32 @@ begin
         i := ((i shr 3) shl 3) + 8;
       end;
       netAddress := TMMDBIPAddress.Create(rawAddress);
-      LLines.Add(Format('%s%s=%s',
-        [outPrefix, ipString, AnsiQuotedStr(Format(
+      if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
+        ipInfo := ipCityInfo
+      else
+        ipInfo := ipCountryInfo;
+      s := Format('%s%s=%s',
+        [outPrefix, ipString, Format(
           'ip:{address:"%s",version:%d},network:"%s/%d",continent:{code:"%s",geoname_id:%s},country:{iso_code:"%s",geoname_id:%s},registered_country:{iso_code:"%s",geoname_id:%s}',
           [ipAddress.ToString, ipVersion, netAddress.ToString, prefixLength, ipInfo.Continent.Code, IntToStr(ipInfo.Continent.GeonameId), ipInfo.Country.ISOCode,
-          IntToStr(ipInfo.country.GeonameId), ipInfo.registeredCountry.ISOCode, IntToStr(ipInfo.RegisteredCountry.GeonameId)]),
-          '"')]));
+          IntToStr(ipInfo.country.GeonameId), ipInfo.registeredCountry.ISOCode, IntToStr(ipInfo.RegisteredCountry.GeonameId)])]);
+      if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
+      begin
+        s := s + Format(',city:{geoname_id:%s,names:[', [IntToStr(ipCityInfo.City.GeonameId)]);
+        j := 0;
+        for nameKey in ipCityInfo.City.Names.Keys do
+        begin
+          s := s + Format('%s%s="%s"', [IfThen(j > 0, ',', ''), nameKey, ipCityInfo.City.Names[nameKey]]);
+          Inc(j);
+        end;
+        s := s + ']}';
+      end;
+      LLines.Add(s);
     end else
       LLines.Add(Format('%s%s=%s', [outPrefix, ipString, 'NOT FOUND']));
   finally
-    ipInfo.Free;
+    ipCityInfo.Free;
+    ipCountryInfo.Free;
   end;
 end;
 

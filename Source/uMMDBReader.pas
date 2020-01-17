@@ -3,6 +3,7 @@
 { uMMDBReader - Delphi reader for the MaxMind DB file format                   }
 {                                                                              }
 { Created by Vitaly Yakovlev                                                   }
+{ Date: October 22, 2019                                                       }
 { Copyright: (c) 2019 Vitaly Yakovlev                                          }
 { Website: http://optinsoft.net/                                               }
 {                                                                              }
@@ -31,8 +32,16 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: October 22, 2019                                                       }
-{ Version: 1.0                                                                 }
+{ Date: January 16, 2020                                                       }
+{ Version: 1.1                                                                 }
+{                                                                              }
+{ Changelog:                                                                   }
+{                                                                              }
+{ v1.1:                                                                        }
+{ - added debug parameter: const keyPath: String                               }
+{                                                                              }
+{ v1.0:                                                                        }
+{ - Initial release                                                            }
 {                                                                              }
 { **************************************************************************** }
 
@@ -44,6 +53,10 @@ uses
   System.SysUtils, System.Classes, Velthuis.BigIntegers,
   System.TypInfo, System.Generics.Collections, System.Rtti, System.DateUtils,
   System.Contnrs, uMMDBIPAddress;
+
+{$IFDEF DEBUG}
+{.$DEFINE DEBUG_OUT}
+{$ENDIF}
 
 type
   TMMDBBuffer = class
@@ -95,26 +108,26 @@ type
     function Decode<T>(offset: Int64; out outOffset: Int64): T; overload;
     procedure Decode<T>(offset: Int64; out outOffset: Int64; var tResult: T); overload;
   private
-    function Decode(expectedType: PTypeInfo; offset: Int64; out outOffset: Int64): TValue; overload;
-    procedure Decode(expectedType: PTypeInfo; offset: Int64; out outOffset: Int64; var valResult: TValue); overload;
+    function Decode(expectedType: PTypeInfo; offset: Int64; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TValue; overload;
+    procedure Decode(expectedType: PTypeInfo; offset: Int64; out outOffset: Int64; var valResult: TValue{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}); overload;
     function CtrlData(offset: Int64; out size: Integer; out outOffset: Int64): ObjectType;
-    function DecodeByType(expectedType: PTypeInfo; _type: ObjectType; offset: Int64; size: Integer; out outOffset: Int64): TValue; overload;
-    procedure DecodeByType(expectedType: PTypeInfo; _type: ObjectType; offset: Int64; size: Integer; out outOffset: Int64; var valResult: TValue); overload;
+    function DecodeByType(expectedType: PTypeInfo; _type: ObjectType; offset: Int64; size: Integer; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TValue; overload;
+    procedure DecodeByType(expectedType: PTypeInfo; _type: ObjectType; offset: Int64; size: Integer; out outOffset: Int64; var valResult: TValue{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}); overload;
     function DecodeBoolean(expectedType: PTypeInfo; size: Integer): Boolean;
     function DecodeDouble(expectedType: PTypeInfo; offset: Int64; size: Integer): Double;
     function DecodeFloat(expectedType: PTypeInfo; offset: Int64; size: Integer): Single;
     function DecodeString(expectedType: PTypeInfo; offset: Int64; size: Integer): String;
     function DecodeBytes(expectedType: PTypeInfo; offset: Int64; size: Integer): TBytes;
-    function DecodeMap(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64): TObject; overload;
-    procedure DecodeMap(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64; objResult: TObject); overload;
-    function DecodeMapToDictionary(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64): TObject; overload;
-    procedure DecodeMapToDictionary(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64; objResult: TObject); overload;
-    function DecodeMapToType(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64): TObject; overload;
-    procedure DecodeMapToType(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64; objResult: TObject); overload;
+    function DecodeMap(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TObject; overload;
+    procedure DecodeMap(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64; objResult: TObject{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}); overload;
+    function DecodeMapToDictionary(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TObject; overload;
+    procedure DecodeMapToDictionary(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64; objResult: TObject{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}); overload;
+    function DecodeMapToType(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TObject; overload;
+    procedure DecodeMapToType(expectedType: PTypeInfo; offset: Int64; size: Integer; out outOffset: Int64; objResult: TObject{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}); overload;
     function DecodeKey(offset: Int64; out outOffset: Int64): TBytes;
     function DecodeLong(expectedType: PTypeInfo; offset: Int64; size: Integer): Int64;
-    function DecodeArray(expectedType: PTypeInfo; size: Integer; offset: Int64; out outOffset: Int64): TObject; overload;
-    procedure DecodeArray(expectedType: PTypeInfo; size: Integer; offset: Int64; out outOffset: Int64; objResult: TObject); overload;
+    function DecodeArray(expectedType: PTypeInfo; size: Integer; offset: Int64; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TObject; overload;
+    procedure DecodeArray(expectedType: PTypeInfo; size: Integer; offset: Int64; out outOffset: Int64; objResult: TObject{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}); overload;
     function DecodeUInt64(expectedType: PTypeInfo; offset: Int64; size: Integer): UInt64;
     function DecodeBigInteger(expectedType: PTypeInfo; offset: Int64; size: Integer): BigInteger;
     function DecodePointer(offset: Int64; size: Integer; out outOffset: Int64): Int64;
@@ -285,10 +298,6 @@ type
 implementation
 
 uses System.Math, Winapi.Windows, System.StrUtils;
-
-{$IFDEF DEBUG}
-{.$DEFINE DEBUG_OUT}
-{$ENDIF}
 
 type
   TMMDBArrayBuffer = class(TMMDBBuffer)
@@ -503,13 +512,13 @@ begin
 end;
 
 procedure TMMDBDecoder.Decode(expectedType: PTypeInfo; offset: Int64;
-  out outOffset: Int64; var valResult: TValue);
+  out outOffset: Int64; var valResult: TValue{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF});
 var
   _type: ObjectType;
   size: Integer;
 begin
   _type := CtrlData(offset, size, offset);
-  DecodeByType(expectedType, _type, offset, size, outOffset, valResult);
+  DecodeByType(expectedType, _type, offset, size, outOffset, valResult{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 procedure TMMDBDecoder.Decode<T>(offset: Int64; out outOffset: Int64;
@@ -518,29 +527,29 @@ var
   val: TValue;
 begin
   val := TValue.From<T>(tResult);
-  Decode(TypeInfo(T), offset, outOffset, val);
+  Decode(TypeInfo(T), offset, outOffset, val{$IFDEF DEBUG_OUT}, ''{$ENDIF});
 end;
 
 function TMMDBDecoder.Decode(expectedType: PTypeInfo; offset: Int64;
-  out outOffset: Int64): TValue;
+  out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TValue;
 var
   _type: ObjectType;
   size: Integer;
 begin
   _type := CtrlData(offset, size, offset);
-  Result := DecodeByType(expectedType, _type, offset, size, outOffset);
+  Result := DecodeByType(expectedType, _type, offset, size, outOffset{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 function TMMDBDecoder.Decode<T>(offset: Int64; out outOffset: Int64): T;
 var
   val: TValue;
 begin
-  val := Decode(TypeInfo(T), offset, outOffset);
+  val := Decode(TypeInfo(T), offset, outOffset{$IFDEF DEBUG_OUT}, ''{$ENDIF});
   Result := val.AsType<T>;
 end;
 
 function TMMDBDecoder.DecodeArray(expectedType: PTypeInfo; size: Integer;
-  offset: Int64; out outOffset: Int64): TObject;
+  offset: Int64; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TObject;
 var
   expectedRttiType: TRttiType;
   t: TRttiInstanceType;
@@ -549,11 +558,11 @@ begin
   t := expectedRttiType.AsInstance;
   Result := t.GetMethod('Create').Invoke(t.MetaclassType, []).AsObject;
   if Assigned(FOwnerObjects) then FOwnerObjects.Add(Result);
-  DecodeArray(expectedType, size, offset, outOffset, Result);
+  DecodeArray(expectedType, size, offset, outOffset, Result{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 procedure TMMDBDecoder.DecodeArray(expectedType: PTypeInfo; size: Integer;
-  offset: Int64; out outOffset: Int64; objResult: TObject);
+  offset: Int64; out outOffset: Int64; objResult: TObject{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF});
 var
   expectedRttiType: TRttiType;
   t: TRttiInstanceType;
@@ -577,7 +586,7 @@ begin
   valueType := paramValue.ParamType.Handle;
   for i := 0 to size-1 do
   begin
-    val := Decode(valueType, offset, offset);
+    val := Decode(valueType, offset, offset{$IFDEF DEBUG_OUT}, keyPath + '[' + IntToStr(i) + ']'{$ENDIF});
     addMethod.Invoke(objResult, [val]);
   end;
   outOffset := offset;
@@ -610,14 +619,15 @@ begin
 end;
 
 function TMMDBDecoder.DecodeByType(expectedType: PTypeInfo; _type: ObjectType;
-  offset: Int64; size: Integer; out outOffset: Int64): TValue;
+  offset: Int64; size: Integer; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TValue;
 begin
   Result := TValue.Empty;
-  DecodeByType(expectedType, _type, offset, size, outOffset, Result);
+  DecodeByType(expectedType, _type, offset, size, outOffset, Result{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 procedure TMMDBDecoder.DecodeByType(expectedType: PTypeInfo; _type: ObjectType;
-  offset: Int64; size: Integer; out outOffset: Int64; var valResult: TValue);
+  offset: Int64; size: Integer; out outOffset: Int64; var valResult: TValue
+  {$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF});
 var
   pointer: Int64;
   _: Int64;
@@ -633,19 +643,19 @@ begin
           TValue.Make(pointer, expectedType, valResult);
           Exit;
         end;
-        Decode(expectedType, Integer(pointer), _, valResult);
+        Decode(expectedType, Integer(pointer), _, valResult{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
       end;
     ObjectType.otMap:
       if not valResult.IsEmpty then
-        DecodeMap(expectedType, offset, size, outOffset, valResult.AsObject)
+        DecodeMap(expectedType, offset, size, outOffset, valResult.AsObject{$IFDEF DEBUG_OUT}, keyPath{$ENDIF})
       else
-        valResult := DecodeMap(expectedType, offset, size, outOffset);
+        valResult := DecodeMap(expectedType, offset, size, outOffset{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 
     ObjectType.otArray:
       if not valResult.IsEmpty then
-        DecodeArray(expectedType, size, offset, outOffset, valResult.AsObject)
+        DecodeArray(expectedType, size, offset, outOffset, valResult.AsObject{$IFDEF DEBUG_OUT}, keyPath{$ENDIF})
       else
-        valResult := DecodeArray(expectedType, size, offset, outOffset);
+        valResult := DecodeArray(expectedType, size, offset, outOffset{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 
     ObjectType.otBoolean:
       begin
@@ -744,24 +754,27 @@ begin
 end;
 
 procedure TMMDBDecoder.DecodeMap(expectedType: PTypeInfo; offset: Int64;
-  size: Integer; out outOffset: Int64; objResult: TObject);
+  size: Integer; out outOffset: Int64; objResult: TObject
+  {$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF});
 begin
   if IsDictType(expectedType) then
-    DecodeMapToDictionary(expectedType, offset, size, outOffset, objResult)
+    DecodeMapToDictionary(expectedType, offset, size, outOffset, objResult{$IFDEF DEBUG_OUT}, keyPath{$ENDIF})
   else
-    DecodeMapToType(expectedType, offset, size, outOffset, objResult);
+    DecodeMapToType(expectedType, offset, size, outOffset, objResult{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 function TMMDBDecoder.DecodeMap(expectedType: PTypeInfo; offset: Int64;
-  size: Integer; out outOffset: Int64): TObject;
+  size: Integer; out outOffset: Int64
+  {$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TObject;
 begin
   if IsDictType(expectedType) then
-    Exit(DecodeMapToDictionary(expectedType, offset, size, outOffset));
-  Result := DecodeMapToType(expectedType, offset, size, outOffset);
+    Exit(DecodeMapToDictionary(expectedType, offset, size, outOffset{$IFDEF DEBUG_OUT}, keyPath{$ENDIF}));
+  Result := DecodeMapToType(expectedType, offset, size, outOffset{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 function TMMDBDecoder.DecodeMapToDictionary(expectedType: PTypeInfo;
-  offset: Int64; size: Integer; out outOffset: Int64): TObject;
+  offset: Int64; size: Integer; out outOffset: Int64
+  {$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TObject;
 var
   expectedRttiType: TRttiType;
   t: TRttiInstanceType;
@@ -770,11 +783,12 @@ begin
   t := expectedRttiType.AsInstance;
   Result := t.GetMethod('Create').Invoke(t.MetaclassType, [0{ACapacity=0}]).AsObject;
   if Assigned(FOwnerObjects) then FOwnerObjects.Add(Result);
-  DecodeMapToDictionary(expectedType, offset, size, outOffset, Result);
+  DecodeMapToDictionary(expectedType, offset, size, outOffset, Result{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 procedure TMMDBDecoder.DecodeMapToDictionary(expectedType: PTypeInfo;
-  offset: Int64; size: Integer; out outOffset: Int64; objResult: TObject);
+  offset: Int64; size: Integer; out outOffset: Int64; objResult: TObject
+  {$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF});
 var
   expectedRttiType: TRttiType;
   t: TRttiInstanceType;
@@ -803,8 +817,8 @@ begin
   valueType := paramValue.ParamType.Handle;
   for i := 0 to size-1 do
   begin
-    key := Decode(keyType, offset, offset);
-    val := Decode(valueType, offset, offset);
+    key := Decode(keyType, offset, offset{$IFDEF DEBUG_OUT}, keyPath + '[' + IntToStr(i) + '].key'{$ENDIF});
+    val := Decode(valueType, offset, offset{$IFDEF DEBUG_OUT}, keyPath + '[' + IntToStr(i) + '].value'{$ENDIF});
 {$IFDEF DEBUG_OUT}
     OutputDebugString(PChar(expectedRttiType.Name + '.' + key.ToString + ':' + paramValue.ParamType.Name + ' = ' + val.ToString));
 {$ENDIF}
@@ -814,7 +828,7 @@ begin
 end;
 
 procedure TMMDBDecoder.DecodeMapToType(expectedType: PTypeInfo; offset: Int64;
-  size: Integer; out outOffset: Int64; objResult: TObject);
+  size: Integer; out outOffset: Int64; objResult: TObject{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF});
 var
   key: String; //TBytes;
   expectedRttiType: TRttiType;
@@ -856,13 +870,13 @@ begin
 {$IFDEF DEBUG_OUT}
           OutputDebugString(PChar(expectedRttiType.Name + '.' + prop.Name + ':' + prop.PropertyType.Name + ' = ' + val.ToString));
 {$ENDIF}
-          Decode(prop.PropertyType.Handle, offset, offset, val);
+          Decode(prop.PropertyType.Handle, offset, offset, val{$IFDEF DEBUG_OUT}, keyPath + '.' + key{$ENDIF});
           Continue;
         end;
       end;
       if prop.IsWritable then
       begin
-        val := Decode(prop.PropertyType.Handle, offset, offset);
+        val := Decode(prop.PropertyType.Handle, offset, offset{$IFDEF DEBUG_OUT}, keyPath + '.' + key{$ENDIF});
 {$IFDEF DEBUG_OUT}
         OutputDebugString(PChar(expectedRttiType.Name + '.' + prop.Name + ':' + prop.PropertyType.Name + ' = ' + val.ToString));
 {$ENDIF}
@@ -875,7 +889,7 @@ begin
     end else
     begin
 {$IFDEF DEBUG_OUT}
-      OutputDebugString(PChar(expectedRttiType.Name + '.[' + key + '] NOT FOUND'));
+      OutputDebugString(PChar(expectedRttiType.Name + ' NOT FOUND (' + keyPath + '.' + key +')'));
 {$ENDIF}
     end;
     offset := NextValueOffset(offset, 1);
@@ -884,7 +898,7 @@ begin
 end;
 
 function TMMDBDecoder.DecodeMapToType(expectedType: PTypeInfo; offset: Int64;
-  size: Integer; out outOffset: Int64): TObject;
+  size: Integer; out outOffset: Int64{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF}): TObject;
 var
   expectedRttiType: TRttiType;
   t: TRttiInstanceType;
@@ -893,7 +907,7 @@ begin
   t := expectedRttiType.AsInstance;
   Result := t.GetMethod('Create').Invoke(t.MetaclassType, []).AsObject;
   if Assigned(FOwnerObjects) then FOwnerObjects.Add(Result);
-  DecodeMapToType(expectedType, offset, size, outOffset, Result);
+  DecodeMapToType(expectedType, offset, size, outOffset, Result{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 function TMMDBDecoder.DecodePointer(offset: Int64; size: Integer;

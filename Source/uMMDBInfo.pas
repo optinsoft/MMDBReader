@@ -3,6 +3,7 @@
 { uMMDBInfo - This module is a part of the MMDB Reader project                 }
 {                                                                              }
 { Created by Vitaly Yakovlev                                                   }
+{ Date: October 22, 2019                                                       }
 { Copyright: (c) 2019 Vitaly Yakovlev                                          }
 { Website: http://optinsoft.net/                                               }
 {                                                                              }
@@ -31,8 +32,21 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: October 22, 2019                                                       }
-{ Version: 1.0                                                                 }
+{ Date: January 16, 2020                                                       }
+{ Version: 1.1                                                                 }
+{                                                                              }
+{ Changelog:                                                                   }
+{                                                                              }
+{ v1.1:                                                                        }
+{ - TMMDBIPInfo renamed to TMMDBIPCountryInfo                                  }
+{ - TMMDBIPInfoEx renamed to TMMDBIPCountryInfoEx                              }
+{ - added TMMDBCityInfo                                                        }
+{ - added TMMDBCityInfoEx                                                      }
+{ - added TMMDBIPCountryCityInfo                                               }
+{ - added TMMDBIPCountryCityInfoEx                                             }
+{                                                                              }
+{ v1.0:                                                                        }
+{ - Initial release                                                            }
 {                                                                              }
 { **************************************************************************** }
 
@@ -66,7 +80,7 @@ type
     property ISOCode: String read _iso_code write _iso_code;
   end;
 
-  TMMDBIPInfo = class
+  TMMDBIPCountryInfo = class
   private
     _continent: TMMDBContinentInfo;
     _country: TMMDBCountryInfo;
@@ -83,41 +97,50 @@ type
     property RegisteredCountry: TMMDBCountryInfo read _registered_country;
   end;
 
-  TMMDBContinentInfoEx = class
+  TMMDBCityInfo = class
   private
-    _code: String;
     _geoname_id: Int64;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    [TMMDBAttribute('geoname_id')]
+    property GeonameId: Int64 read _geoname_id write _geoname_id;
+  end;
+
+  TMMDBIPCountryCityInfo = class(TMMDBIPCountryInfo)
+  private
+    _city: TMMDBCityInfo;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    //
+    [TMMDBAttribute('city')]
+    property City: TMMDBCityInfo read _city;
+  end;
+
+  TMMDBContinentInfoEx = class(TMMDBContinentInfo)
+  private
     _names: TDictionary<string, string>;
   public
     constructor Create;
     destructor Destroy; override;
     //
-    [TMMDBAttribute('code')]
-    property Code: String read _code write _code;
-    [TMMDBAttribute('geoname_id')]
-    property GeonameId: Int64 read _geoname_id write _geoname_id;
     [TMMDBAttribute('names')]
     property Names: TDictionary<string, string> read _names;
   end;
 
-  TMMDBCountryInfoEx = class
+  TMMDBCountryInfoEx = class(TMMDBCountryInfo)
   private
-    _geoname_id: Int64;
-    _iso_code: String;
     _names: TDictionary<string, string>;
   public
     constructor Create;
     destructor Destroy; override;
     //
-    [TMMDBAttribute('geoname_id')]
-    property GeonameId: Int64 read _geoname_id write _geoname_id;
-    [TMMDBAttribute('iso_code')]
-    property ISOCode: String read _iso_code write _iso_code;
     [TMMDBAttribute('names')]
     property Names: TDictionary<string, string> read _names;
   end;
 
-  TMMDBIPInfoEx = class
+  TMMDBIPCountryInfoEx = class
   private
     _continent: TMMDBContinentInfoEx;
     _country: TMMDBCountryInfoEx;
@@ -134,18 +157,40 @@ type
     property RegisteredCountry: TMMDBCountryInfoEx read _registered_country;
   end;
 
+  TMMDBCityInfoEx = class(TMMDBCityInfo)
+  private
+    _names: TDictionary<string, string>;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    //
+    [TMMDBAttribute('names')]
+    property Names: TDictionary<string, string> read _names;
+  end;
+
+  TMMDBIPCountryCityInfoEx = class(TMMDBIPCountryInfoEx)
+  private
+    _city: TMMDBCityInfoEx;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    //
+    [TMMDBAttribute('city')]
+    property City: TMMDBCityInfoEx read _city;
+  end;
+
 implementation
 
-{ TMMDBIPInfo }
+{ TMMDBIPCountryInfo }
 
-constructor TMMDBIPInfo.Create;
+constructor TMMDBIPCountryInfo.Create;
 begin
   _continent := TMMDBContinentInfo.Create;
   _country := TMMDBCountryInfo.Create;
   _registered_country := TMMDBCountryInfo.Create;
 end;
 
-destructor TMMDBIPInfo.Destroy;
+destructor TMMDBIPCountryInfo.Destroy;
 begin
   _registered_country.Free;
   _country.Free;
@@ -157,6 +202,7 @@ end;
 
 constructor TMMDBContinentInfoEx.Create;
 begin
+  inherited;
   _names := TDictionary<string, string>.Create;
 end;
 
@@ -170,6 +216,7 @@ end;
 
 constructor TMMDBCountryInfoEx.Create;
 begin
+  inherited;
   _names := TDictionary<string, string>.Create;
 end;
 
@@ -179,20 +226,75 @@ begin
   inherited;
 end;
 
-{ TMMDBIPInfoEx }
+{ TMMDBIPCountryInfoEx }
 
-constructor TMMDBIPInfoEx.Create;
+constructor TMMDBIPCountryInfoEx.Create;
 begin
   _continent := TMMDBContinentInfoEx.Create;
   _country := TMMDBCountryInfoEx.Create;
   _registered_country := TMMDBCountryInfoEx.Create;
 end;
 
-destructor TMMDBIPInfoEx.Destroy;
+destructor TMMDBIPCountryInfoEx.Destroy;
 begin
   _registered_country.Free;
   _country.Free;
   _continent.Free;
+  inherited;
+end;
+
+{ TMMDBCityInfo }
+
+constructor TMMDBCityInfo.Create;
+begin
+
+end;
+
+destructor TMMDBCityInfo.Destroy;
+begin
+
+  inherited;
+end;
+
+{ TMMDBIPCountryCityInfo }
+
+constructor TMMDBIPCountryCityInfo.Create;
+begin
+  inherited;
+  _city := TMMDBCityInfo.Create;
+end;
+
+destructor TMMDBIPCountryCityInfo.Destroy;
+begin
+  _city.Free;
+  inherited;
+end;
+
+{ TMMDBCityInfoEx }
+
+constructor TMMDBCityInfoEx.Create;
+begin
+  inherited;
+  _names := TDictionary<string, string>.Create;
+end;
+
+destructor TMMDBCityInfoEx.Destroy;
+begin
+  _names.Free;
+  inherited;
+end;
+
+{ TMMDBIPCountryCityInfoEx }
+
+constructor TMMDBIPCountryCityInfoEx.Create;
+begin
+  inherited;
+  _city := TMMDBCityInfoEx.Create;
+end;
+
+destructor TMMDBIPCountryCityInfoEx.Destroy;
+begin
+  _city.Free;
   inherited;
 end;
 

@@ -25,11 +25,18 @@ object Form1: TForm1
     Height = 13
     Caption = 'IP Address:'
   end
+  object Label2: TLabel
+    Left = 16
+    Top = 51
+    Width = 81
+    Height = 13
+    Caption = 'Display IP count:'
+  end
   object Memo1: TMemo
     Left = 16
-    Top = 56
+    Top = 75
     Width = 745
-    Height = 441
+    Height = 422
     Anchors = [akLeft, akTop, akRight, akBottom]
     ScrollBars = ssBoth
     TabOrder = 0
@@ -44,7 +51,7 @@ object Form1: TForm1
     OnClick = Button1Click
   end
   object Edit1: TEdit
-    Left = 221
+    Left = 213
     Top = 15
     Width = 76
     Height = 21
@@ -61,10 +68,28 @@ object Form1: TForm1
     TabOrder = 3
     OnClick = Button2Click
   end
+  object Edit2: TEdit
+    Left = 103
+    Top = 48
+    Width = 57
+    Height = 21
+    TabOrder = 4
+    Text = '1000'
+  end
+  object CheckBox1: TCheckBox
+    Left = 176
+    Top = 50
+    Width = 73
+    Height = 17
+    Caption = 'IPv4 only'
+    Checked = True
+    State = cbChecked
+    TabOrder = 5
+  end
   object OpenDialog1: TOpenDialog
     Filter = 'MMDB files (*.mmdb)|*.mmdb|All files (*.*)|*.*'
     Options = [ofHideReadOnly, ofFileMustExist, ofEnableSizing]
     Left = 48
-    Top = 72
+    Top = 144
   end
 end
