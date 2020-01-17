@@ -16,7 +16,7 @@ uses uMMDBReader;
 var
   LMMDBReader: TMMDBReader;
   LIPAddress: TMMDBIPAddress;
-  LIPInfo: TMMDBIPCountryInfo
+  LIPInfo: TMMDBIPCountryInfo;
   prefixLength: Integer;
 begin
  LIPInfo := TMMDBIPCountryInfo.Create;
