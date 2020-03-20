@@ -236,6 +236,7 @@ type
     nodes: TList<TMMDBNetNode>;
     node: TMMDBNetNode;
     _iterator: IMMDBIterator<T>;
+    _dataCache: TDictionary<Integer, T>;
     function GetCurrentGeneric(): IMMDBIterator<T>;
   public
     constructor Create(reader: TMMDBReader; IPv4Only: Boolean;
@@ -1113,12 +1114,14 @@ begin
   root := TMMDBNetNode.Create(byteCount, _reader.StartNode(byteCount * 8));
   nodes.Add(root);
   node := nil;
+  _dataCache := TDictionary<Integer, T>.Create;
 end;
 
 destructor TMMDBEnumerator<T>.Destroy;
 var
   tmp: TMMDBNetNode;
 begin
+  _dataCache.Free;
   if node <> nil then
      FreeAndNil(node);
   while nodes.Count > 0 do

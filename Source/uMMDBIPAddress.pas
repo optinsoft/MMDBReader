@@ -46,10 +46,9 @@ uses
 
 type
   TMMDBIPAddress = record
-  private
+  public
     constructor Create(ipv4: TIPv4); overload;
     constructor Create(ipv6: TIPv6); overload;
-  public
     constructor Create(const address: TBytes); overload;
     function GetAddressBytes: TBytes;
     class function TryParse(const ipString: String; out address: TMMDBIPAddress): Boolean; static;
