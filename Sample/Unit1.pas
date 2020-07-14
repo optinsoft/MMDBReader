@@ -64,14 +64,22 @@ type
     Edit2: TEdit;
     Label2: TLabel;
     CheckBox1: TCheckBox;
+    Button3: TButton;
+    SaveDialog1: TSaveDialog;
+    Label3: TLabel;
     procedure Button1Click(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure Button2Click(Sender: TObject);
+    procedure Button3Click(Sender: TObject);
   private
     { Private declarations }
     FMMDBReader: TMMDBReader;
+    FExportCSVFilename: String;
     procedure ReadMMDB(const Filename: String);
     procedure TestIP(const ipString: String; const outPrefix: String = '');
+    procedure ExportToCSV;
+    procedure ExportStarted(Sender: TObject);
+    procedure ExportTerminated(Sender: TObject);
   public
     { Public declarations }
   end;
@@ -103,6 +111,132 @@ end;
 procedure TForm1.Button2Click(Sender: TObject);
 begin
   TestIP(Edit1.Text);
+end;
+
+type
+  TExportThread = class(TThread)
+  protected
+    procedure Execute; override;
+  public
+    constructor Create;
+  end;
+
+constructor TExportThread.Create;
+begin
+  inherited;
+  FreeOnTerminate := True;
+  OnTerminate := Form1.ExportTerminated;
+  Form1.ExportStarted(Self);
+end;
+
+procedure TExportThread.Execute;
+begin
+  try
+    Form1.ExportToCSV;
+  except
+    ShowException(ExceptObject, ExceptAddr);
+  end;
+end;
+
+procedure TForm1.Button3Click(Sender: TObject);
+begin
+  if SaveDialog1.Execute then
+  begin
+    FExportCSVFilename := SaveDialog1.FileName;
+    TExportThread.Create;
+  end;
+end;
+
+procedure TForm1.ExportStarted(Sender: TObject);
+begin
+  Button1.Enabled := False;
+  Button2.Enabled := False;
+  Button3.Enabled := False;
+  Label3.Caption := 'Exporting...';
+  Label3.Visible := True;
+end;
+
+procedure TForm1.ExportTerminated(Sender: TObject);
+begin
+  Button1.Enabled := True;
+  Button2.Enabled := True;
+  Button3.Enabled := True;
+  Label3.Caption := 'Export completed.';
+end;
+
+procedure TForm1.ExportToCSV;
+
+  function FormatIPRange(rawAddress: TBytes; Prefix: Integer;
+    const ISOCode: String): String;
+  var
+    netAddress, endNetAddress: TMMDBIPAddress;
+    endRawAddress: TBytes;
+    bitLength: Integer;
+    i, h: Integer;
+    w: Word;
+  begin
+    endRawAddress := Copy(rawAddress);
+    bitLength := Length(rawAddress) * 8;
+    i := Prefix;
+    while i < bitLength do
+    begin
+      h := 8 - (i mod 8);
+      rawAddress[i shr 3] :=
+        (rawAddress[i shr 3] shr h) shl h;
+      w := rawAddress[i shr 3] shr h;
+      w := ((w shl 8) or $ff) shl h;
+      endRawAddress[i shr 3] := w shr 8;
+      i := ((i shr 3) shl 3) + 8;
+    end;
+    netAddress := TMMDBIPAddress.Create(rawAddress);
+    endNetAddress := TMMDBIPAddress.Create(endRawAddress);
+    Result := Format('%s,%s,%s',
+      [netAddress.ToString, endNetAddress.ToString, ISOCode]);
+  end;
+
+  function FormatIPCountryNode(node: TMMDBIteratorNode<TMMDBIPCountryInfo>): String;
+  begin
+    Result := FormatIPRange(node.Start.GetAddressBytes, node.Prefix, node.Data.Country.ISOCode);
+  end;
+
+  function FormatIPCountryCityNode(node: TMMDBIteratorNode<TMMDBIPCountryCityInfoEx>): String;
+  begin
+    Result := FormatIPRange(node.Start.GetAddressBytes, node.Prefix, node.Data.City.Names['en']);
+  end;
+
+var
+  countryIterator: IMMDBIterator<TMMDBIPCountryInfo>;
+  cityIterator: IMMDBIterator<TMMDBIPCountryCityInfoEx>;
+  IPv4Only: Boolean;
+  LOutStream: TStream;
+  S: String;
+  Buffer: TBytes;
+begin
+  LOutStream := nil;
+  IPv4Only := CheckBox1.Checked;
+  try
+    LOutStream := TFileStream.Create(FExportCSVFilename, fmCreate or fmShareDenyWrite);
+    if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
+    begin
+      for cityIterator in FMMDBReader.FindAll<TMMDBIPCountryCityInfoEx>(IPv4Only) do
+      begin
+        S := FormatIPCountryCityNode(cityIterator.Node) + sLineBreak;
+        Buffer := TEncoding.UTF8.GetBytes(S);
+        LOutStream.WriteBuffer(Buffer, Length(Buffer));
+      end;
+    end else
+    begin
+      for countryIterator in FMMDBReader.FindAll<TMMDBIPCountryInfo>(IPv4Only) do
+      begin
+        S := FormatIPCountryNode(countryIterator.Node) + sLineBreak;
+        Buffer := TEncoding.UTF8.GetBytes(S);
+        LOutStream.WriteBuffer(Buffer, Length(Buffer));
+      end;
+    end;
+  finally
+    if Assigned(LOutStream) then
+      LOutStream.Free;
+  end;
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
@@ -188,8 +322,10 @@ begin
   LLines.Clear;
   if Assigned(FMMDBReader) then FreeAndNil(FMMDBReader);
   Button2.Enabled := False;
+  Button3.Enabled := False;
   FMMDBReader := TMMDBReader.Create(Filename);
   Button2.Enabled := True;
+  Button3.Enabled := True;
   LLines.BeginUpdate;
   try
     LLines.Add(Format('binary_format_major_version=%d', [FMMDBReader.Metadata.BinaryFormatMajorVersion]));

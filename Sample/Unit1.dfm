@@ -32,6 +32,14 @@ object Form1: TForm1
     Height = 13
     Caption = 'Display IP count:'
   end
+  object Label3: TLabel
+    Left = 558
+    Top = 18
+    Width = 54
+    Height = 13
+    Caption = 'Exporting..'
+    Visible = False
+  end
   object Memo1: TMemo
     Left = 16
     Top = 75
@@ -86,10 +94,29 @@ object Form1: TForm1
     State = cbChecked
     TabOrder = 5
   end
+  object Button3: TButton
+    Left = 439
+    Top = 13
+    Width = 105
+    Height = 25
+    Caption = 'Export to CSV...'
+    Enabled = False
+    TabOrder = 6
+    OnClick = Button3Click
+  end
   object OpenDialog1: TOpenDialog
     Filter = 'MMDB files (*.mmdb)|*.mmdb|All files (*.*)|*.*'
     Options = [ofHideReadOnly, ofFileMustExist, ofEnableSizing]
     Left = 48
+    Top = 144
+  end
+  object SaveDialog1: TSaveDialog
+    DefaultExt = '.CSV'
+    Filter = 
+      'CSV files (*.CSV)|*.CSV|TXT files (*.TXT)|*.TXT|All files (*.*)|' +
+      '*.*'
+    Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
+    Left = 128
     Top = 144
   end
 end
