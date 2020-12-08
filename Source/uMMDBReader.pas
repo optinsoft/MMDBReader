@@ -1293,6 +1293,7 @@ begin
     FMetadata.Free;
   FMetaOwnerObjects.Free;
   FFindOwnerObjects.Free;
+  _database.Free;
   inherited;
 end;
 
