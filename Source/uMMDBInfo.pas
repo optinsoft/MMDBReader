@@ -32,10 +32,13 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: January 16, 2020                                                       }
-{ Version: 1.1                                                                 }
+{ Date: January 21, 2021                                                       }
+{ Version: 1.2                                                                 }
 {                                                                              }
 { Changelog:                                                                   }
+{ v1.2:                                                                        }
+{ - added TMMDBLocation                                                        }
+{ - added TMMDBIPCountryCityInfoEx.Location                                    }
 {                                                                              }
 { v1.1:                                                                        }
 { - TMMDBIPInfo renamed to TMMDBIPCountryInfo                                  }
@@ -168,15 +171,35 @@ type
     property Names: TDictionary<string, string> read _names;
   end;
 
+  TMMDBLocation = class
+  private
+    _accuracy_radius: Integer;
+    _latitude: Double;
+    _longitude: Double;
+    _time_zone: String;
+  public
+    [TMMDBAttribute('accuracy_radius')]
+    property Accuracy: Integer read _accuracy_radius write _accuracy_radius;
+    [TMMDBAttribute('latitude')]
+    property Latitude: Double read _latitude write _latitude;
+    [TMMDBAttribute('longitude')]
+    property Longitude: Double read _longitude write _longitude;
+    [TMMDBAttribute('time_zone')]
+    property TimeZone: String read _time_zone write _time_zone;
+  end;
+
   TMMDBIPCountryCityInfoEx = class(TMMDBIPCountryInfoEx)
   private
     _city: TMMDBCityInfoEx;
+    _location: TMMDBLocation;
   public
     constructor Create;
     destructor Destroy; override;
     //
     [TMMDBAttribute('city')]
     property City: TMMDBCityInfoEx read _city;
+    [TMMDBAttribute('location')]
+    property Location: TMMDBLocation read _location;
   end;
 
 implementation
@@ -290,10 +313,12 @@ constructor TMMDBIPCountryCityInfoEx.Create;
 begin
   inherited;
   _city := TMMDBCityInfoEx.Create;
+  _location := TMMDBLocation.Create;
 end;
 
 destructor TMMDBIPCountryCityInfoEx.Destroy;
 begin
+  _location.Free;
   _city.Free;
   inherited;
 end;

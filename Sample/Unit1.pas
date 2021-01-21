@@ -32,10 +32,16 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: January 16, 2020                                                       }
-{ Version: 1.1                                                                 }
+{ Date: January 21, 2021                                                       }
+{ Version: 1.3                                                                 }
 {                                                                              }
 { Changelog:                                                                   }
+{ v1.3:                                                                        }
+{ - print city location info                                                   }
+{                                                                              }
+{ v1.2:                                                                        }
+{ -  Names['en'] has been replaced by Names.TryGetValue('en', ...) to prevent  }
+{ possible 'key not found' exception                                           }
 {                                                                              }
 { v1.1:                                                                        }
 { - added reading of City mmdb                                                 }
@@ -200,8 +206,11 @@ procedure TForm1.ExportToCSV;
   end;
 
   function FormatIPCountryCityNode(node: TMMDBIteratorNode<TMMDBIPCountryCityInfoEx>): String;
+  var
+    cityNameEN: String;
   begin
-    Result := FormatIPRange(node.Start.GetAddressBytes, node.Prefix, node.Data.City.Names['en']);
+    if not node.Data.City.Names.TryGetValue('en', cityNameEN) then cityNameEN := '';
+    Result := FormatIPRange(node.Start.GetAddressBytes, node.Prefix, cityNameEN);
   end;
 
 var
@@ -250,6 +259,7 @@ var
   LLines: TStrings;
   LDictItem: TPair<string, string>;
   I: Integer;
+  fs: TFormatSettings;
 
 {$IFDEF DEBUG_IP}
 const
@@ -288,6 +298,7 @@ const
     rawAddress: TBytes;
     bitLength: Integer;
     i, h: Integer;
+    cityNameEN: String;
   begin
     rawAddress := node.Start.GetAddressBytes;
     bitLength := Length(rawAddress) * 8;
@@ -300,12 +311,17 @@ const
       i := ((i shr 3) shl 3) + 8;
     end;
     netAddress := TMMDBIPAddress.Create(rawAddress);
-    Result := Format('%s/%d,%s,%s,%s,%s,%s,%s,%s,%s',
+    if not node.Data.City.Names.TryGetValue('en', cityNameEN) then cityNameEN := '';
+    Result := Format('%s/%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s',
       [netAddress.ToString, node.Prefix,
        node.Data.Continent.code, IntToStr(node.Data.Continent.GeonameId),
        node.Data.Country.ISOCode, IntToStr(node.Data.Country.GeonameId),
        node.Data.RegisteredCountry.ISOCode, IntToStr(node.Data.RegisteredCountry.GeonameId),
-       IntToStr(node.Data.City.GeonameId), node.Data.City.Names['en']]);
+       IntToStr(node.Data.City.GeonameId), cityNameEN,
+       IntToStr(node.Data.Location.Accuracy),
+       FloatToStrF(node.Data.Location.Latitude, ffFixed, 4, 2, fs),
+       FloatToStrF(node.Data.Location.Longitude, ffFixed, 4, 2, fs),
+       node.Data.Location.TimeZone]);
   end;
 
 var
@@ -316,6 +332,10 @@ var
   displayLinesCount: Integer;
   IPv4Only: Boolean;
 begin
+  {$WARN SYMBOL_PLATFORM OFF}
+  fs := TFormatSettings.Create(GetThreadLocale());
+  {$WARN SYMBOL_PLATFORM ON}
+  fs.DecimalSeparator := '.';
   displayLinesCount := StrToInt(Edit2.Text);
   IPv4Only := CheckBox1.Checked;
   LLines := Memo1.Lines;
@@ -345,7 +365,12 @@ begin
 {$ENDIF}
     if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
     begin
-      LLines.Add('network,continent_code,continent_geoname_id,country_iso_code,country_geoname_id,registered_country_iso_code,registered_country_geoname_id,city_geoname_id,city_names_en');
+      LLines.Add(String.Join(',',
+        ['network','continent_code','continent_geoname_id','country_iso_code',
+        'country_geoname_id','registered_country_iso_code','registered_country_geoname_id',
+        'city_geoname_id','city_names_en','accuracy_radius','latitude',
+        'longitude','time_zone'],
+        0, 13));
       for cityIterator in FMMDBReader.FindAll<TMMDBIPCountryCityInfoEx>(IPv4Only) do
       begin
         LLines.Add(FormatIPCountryCityNode(cityIterator.Node));
@@ -353,7 +378,10 @@ begin
       end;
     end else
     begin
-      LLines.Add('network,continent_code,continent_geoname_id,country_iso_code,country_geoname_id,registered_country_iso_code,registered_country_geoname_id');
+      LLines.Add(String.Join(',',
+        ['network','continent_code','continent_geoname_id','country_iso_code',
+        'country_geoname_id','registered_country_iso_code','registered_country_geoname_id'],
+        0, 7));
       for countryIterator in FMMDBReader.FindAll<TMMDBIPCountryInfo>(IPv4Only) do
       begin
         LLines.Add(FormatIPCountryNode(countryIterator.Node));
