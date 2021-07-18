@@ -32,10 +32,13 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: January 21, 2021                                                       }
-{ Version: 1.3                                                                 }
+{ Date: July 18, 2021                                                          }
+{ Version: 1.4                                                                 }
 {                                                                              }
 { Changelog:                                                                   }
+{ v1.4:                                                                        }
+{ - print city location info in TestIP()                                       }
+{                                                                              }
 { v1.3:                                                                        }
 { - print city location info                                                   }
 {                                                                              }
@@ -409,7 +412,12 @@ var
   i, j, h: Integer;
   s: String;
   nameKey: String;
+  fs: TFormatSettings;
 begin
+  {$WARN SYMBOL_PLATFORM OFF}
+  fs := TFormatSettings.Create(GetThreadLocale());
+  {$WARN SYMBOL_PLATFORM ON}
+  fs.DecimalSeparator := '.';
   LLines := Memo1.Lines;
   ipAddress := TMMDBIPAddress.Parse(ipString);
   rawAddress := ipAddress.GetAddressBytes;
@@ -455,6 +463,10 @@ begin
           Inc(j);
         end;
         s := s + ']}';
+        s := s + ',location:{accuracy:"' +IntToStr(ipCityInfo.Location.Accuracy)+
+          '",latitude:"'+FloatToStrF(ipCityInfo.Location.Latitude, ffFixed, 4, 2, fs)+
+          '",longitude:"'+FloatToStrF(ipCityInfo.Location.Longitude, ffFixed, 4, 2, fs)+
+          '",timezone:"'+ipCityInfo.Location.TimeZone+'"}';
       end;
       LLines.Add(s);
     end else
