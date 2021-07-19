@@ -32,8 +32,12 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: July 18, 2021                                                          }
-{ Version: 1.4                                                                 }
+{ Date: July 19, 2021                                                          }
+{ Version: 1.5                                                                 }
+{                                                                              }
+{ Changelog:                                                                   }
+{ v1. 5:                                                                       }
+{ - show mmdb formats: *-domain, *-anonymous-ip, *-isp, *-asn                  }
 {                                                                              }
 { Changelog:                                                                   }
 { v1.4:                                                                        }
@@ -60,7 +64,7 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
-  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, uMMDBReader;
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, uMMDBReader, uMMDBInfo, uMMDBIPAddress;
 
 type
   TForm1 = class(TForm)
@@ -80,15 +84,32 @@ type
     procedure FormDestroy(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+  private type
+    TForEachLine = reference to procedure(const ALine: String);
+    TReduceRef = reference to function (const R: String; const A: array of String; I: Integer): String;
   private
     { Private declarations }
     FMMDBReader: TMMDBReader;
     FExportCSVFilename: String;
+    fs: TFormatSettings;
     procedure ReadMMDB(const Filename: String);
     procedure TestIP(const ipString: String; const outPrefix: String = '');
     procedure ExportToCSV;
     procedure ExportStarted(Sender: TObject);
     procedure ExportTerminated(Sender: TObject);
+    procedure MMDBFindAll(AIPv4Only: Boolean; AForEachLine: TForEachLine;
+      AMaxLinesCount: Integer = 0; AOnHeaderLine: TForEachLine = nil);
+    function EscapeString(const S: String): String;
+    function Reduce(const A: array of String; L: TReduceRef): String;
+    function FormatRow(const columns: array of String): String;
+    function NodeNetwork(rawAddress: TBytes; nodePrefix: Integer): String;
+    function FormatIPCountryInfo(const network: String; info: TMMDBIPCountryInfoEx): String;
+    function FormatIPCountryCityInfo(const network: String; info: TMMDBIPCountryCityInfoEx): String;
+    function FormatISPInfo(const network: String; info: TMMDBISP): String;
+    function FormatASNInfo(const network: String; info: TMMDBASN): String;
+    function FormatAnonymousIPInfo(const network: String; info: TMMDBAnonymousIP): String;
+    function FormatDomainInfo(const network: String; info: TMMDBDomain): String;
   public
     { Public declarations }
   end;
@@ -99,7 +120,7 @@ var
 implementation
 
 uses
-  uMMDBInfo, uMMDBIPAddress, System.Generics.Collections,
+  System.Generics.Collections,
   System.DateUtils, System.StrUtils;
 
 {$IFDEF DEBUG}
@@ -107,6 +128,14 @@ uses
 {$ENDIF}
 
 {$R *.dfm}
+
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+  {$WARN SYMBOL_PLATFORM OFF}
+  fs := TFormatSettings.Create(GetThreadLocale());
+  {$WARN SYMBOL_PLATFORM ON}
+  fs.DecimalSeparator := '.';
+end;
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
@@ -174,7 +203,7 @@ begin
 end;
 
 procedure TForm1.ExportToCSV;
-
+{
   function FormatIPRange(rawAddress: TBytes; Prefix: Integer;
     const ISOCode: String): String;
   var
@@ -203,7 +232,7 @@ procedure TForm1.ExportToCSV;
       [netAddress.ToString, endNetAddress.ToString, ISOCode]);
   end;
 
-  function FormatIPCountryNode(node: TMMDBIteratorNode<TMMDBIPCountryInfo>): String;
+  function FormatIPCountryNode(node: TMMDBIteratorNode<TMMDBIPCountryInfoEx>): String;
   begin
     Result := FormatIPRange(node.Start.GetAddressBytes, node.Prefix, node.Data.Country.ISOCode);
   end;
@@ -215,36 +244,22 @@ procedure TForm1.ExportToCSV;
     if not node.Data.City.Names.TryGetValue('en', cityNameEN) then cityNameEN := '';
     Result := FormatIPRange(node.Start.GetAddressBytes, node.Prefix, cityNameEN);
   end;
-
+}
 var
-  countryIterator: IMMDBIterator<TMMDBIPCountryInfo>;
-  cityIterator: IMMDBIterator<TMMDBIPCountryCityInfoEx>;
   IPv4Only: Boolean;
   LOutStream: TStream;
-  S: String;
-  Buffer: TBytes;
 begin
   LOutStream := nil;
   IPv4Only := CheckBox1.Checked;
   try
     LOutStream := TFileStream.Create(FExportCSVFilename, fmCreate or fmShareDenyWrite);
-    if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
-    begin
-      for cityIterator in FMMDBReader.FindAll<TMMDBIPCountryCityInfoEx>(IPv4Only) do
+    MMDBFindAll(IPv4Only,
+      procedure (const ALine: String)
+      var Buffer: TBytes;
       begin
-        S := FormatIPCountryCityNode(cityIterator.Node) + sLineBreak;
-        Buffer := TEncoding.UTF8.GetBytes(S);
+        Buffer := TEncoding.UTF8.GetBytes(ALine + sLineBreak);
         LOutStream.WriteBuffer(Buffer, Length(Buffer));
-      end;
-    end else
-    begin
-      for countryIterator in FMMDBReader.FindAll<TMMDBIPCountryInfo>(IPv4Only) do
-      begin
-        S := FormatIPCountryNode(countryIterator.Node) + sLineBreak;
-        Buffer := TEncoding.UTF8.GetBytes(S);
-        LOutStream.WriteBuffer(Buffer, Length(Buffer));
-      end;
-    end;
+      end);
   finally
     if Assigned(LOutStream) then
       LOutStream.Free;
@@ -257,88 +272,132 @@ begin
     FreeAndNil(FMMDBReader);
 end;
 
+procedure TForm1.MMDBFindAll(AIPv4Only: Boolean;
+  AForEachLine: TForEachLine; AMaxLinesCount: Integer;
+  AOnHeaderLine: TForEachLine);
+var
+  countryIterator: IMMDBIterator<TMMDBIPCountryInfoEx>;
+  cityIterator: IMMDBIterator<TMMDBIPCountryCityInfoEx>;
+  ispIterator: IMMDBIterator<TMMDBISP>;
+  asnIterator: IMMDBIterator<TMMDBASN>;
+  anonymousIterator: IMMDBIterator<TMMDBAnonymousIP>;
+  domainIterator: IMMDBIterator<TMMDBDomain>;
+  N: Integer;
+begin
+  N := 0;
+  if EndsText('-domain', FMMDBReader.Metadata.DatabaseType)  then
+  begin
+    if Assigned(AOnHeaderLine) then
+      AOnHeaderLine(FormatRow([
+        'network','domain'
+      ]));
+    for domainIterator in FMMDBReader.FindAll<TMMDBDomain>(AIPv4Only) do
+    begin
+      AForEachLine(FormatDomainInfo(
+        NodeNetwork(domainIterator.Node.Start.GetAddressBytes, domainIterator.Node.Prefix),
+        domainIterator.Node.Data));
+      Inc(N);
+      if (AMaxLinesCount > 0) and (N >= AMaxLinesCount) then Break;
+    end;
+  end else
+  if EndsText('-anonymous-ip', FMMDBReader.Metadata.DatabaseType)  then
+  begin
+    if Assigned(AOnHeaderLine) then
+      AOnHeaderLine(FormatRow([
+        'network','is_anonymous','is_anonymous_vpn','is_hosting_provider',
+        'is_public_proxy','is_residential_proxy','is_tor_exit_node'
+      ]));
+    for anonymousIterator in FMMDBReader.FindAll<TMMDBAnonymousIP>(AIPv4Only) do
+    begin
+      AForEachLine(FormatAnonymousIPInfo(
+        NodeNetwork(anonymousIterator.Node.Start.GetAddressBytes, anonymousIterator.Node.Prefix),
+        anonymousIterator.Node.Data));
+      Inc(N);
+      if (AMaxLinesCount > 0) and (N >= AMaxLinesCount) then Break;
+    end;
+  end else
+  if EndsText('-isp', FMMDBReader.Metadata.DatabaseType) then
+  begin
+    if Assigned(AOnHeaderLine) then
+      AOnHeaderLine(FormatRow([
+        'network','isp','organization','autonomous_system_number','autonomous_system_organization'
+      ]));
+    for ispIterator in FMMDBReader.FindAll<TMMDBISP>(AIPv4Only) do
+    begin
+      AForEachLine(FormatISPInfo(
+        NodeNetwork(ispIterator.Node.Start.GetAddressBytes, ispIterator.Node.Prefix),
+        ispIterator.Node.Data));
+      Inc(N);
+      if (AMaxLinesCount > 0) and (N >= AMaxLinesCount) then Break;
+    end;
+  end else
+  if EndsText('-asn', FMMDBReader.Metadata.DatabaseType) then
+  begin
+    if Assigned(AOnHeaderLine) then
+      AOnHeaderLine(FormatRow([
+        'network','autonomous_system_number','autonomous_system_organization'
+      ]));
+    for asnIterator in FMMDBReader.FindAll<TMMDBASN>(AIPv4Only) do
+    begin
+      AForEachLine(FormatASNInfo(
+        NodeNetwork(asnIterator.Node.Start.GetAddressBytes, asnIterator.Node.Prefix),
+        asnIterator.Node.Data));
+      Inc(N);
+      if (AMaxLinesCount > 0) and (N >= AMaxLinesCount) then Break;
+    end;
+  end else
+  if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
+  begin
+    if Assigned(AOnHeaderLine) then
+      AOnHeaderLine(FormatRow([
+        'network','continent_code','continent_geoname_id','country_iso_code',
+        'country_geoname_id','registered_country_iso_code','registered_country_geoname_id',
+        'city_geoname_id','city_names_en','accuracy_radius','latitude',
+        'longitude','time_zone'
+      ]));
+    for cityIterator in FMMDBReader.FindAll<TMMDBIPCountryCityInfoEx>(AIPv4Only) do
+    begin
+      AForEachLine(FormatIPCountryCityInfo(
+        NodeNetwork(cityIterator.Node.Start.GetAddressBytes, cityIterator.Node.Prefix),
+        cityIterator.Node.Data));
+      Inc(N);
+      if (AMaxLinesCount > 0) and (N >= AMaxLinesCount) then Break;
+    end;
+  end else
+  begin
+    if Assigned(AOnHeaderLine) then
+      AOnHeaderLine(FormatRow([
+        'network','continent_code','continent_geoname_id','country_iso_code',
+        'country_geoname_id','registered_country_iso_code','registered_country_geoname_id'
+      ]));
+    for countryIterator in FMMDBReader.FindAll<TMMDBIPCountryInfoEx>(AIPv4Only) do
+    begin
+      AForEachLine(FormatIPCountryInfo(
+        NodeNetwork(countryIterator.Node.Start.GetAddressBytes, countryIterator.Node.Prefix),
+        countryIterator.Node.Data));
+      Inc(N);
+      if (AMaxLinesCount > 0) and (N >= AMaxLinesCount) then Break;
+    end;
+  end;
+end;
+
 procedure TForm1.ReadMMDB(const Filename: String);
 var
   LLines: TStrings;
   LDictItem: TPair<string, string>;
   I: Integer;
-  fs: TFormatSettings;
 
 {$IFDEF DEBUG_IP}
 const
   DEBUG_IPv4 = '8.8.4.4';
   DEBUG_IPv6 = '2001:4860:4860::8844';
 {$ENDIF}
-
-  function FormatIPCountryNode(node: TMMDBIteratorNode<TMMDBIPCountryInfo>): String;
-  var
-    netAddress: TMMDBIPAddress;
-    rawAddress: TBytes;
-    bitLength: Integer;
-    i, h: Integer;
-  begin
-    rawAddress := node.Start.GetAddressBytes;
-    bitLength := Length(rawAddress) * 8;
-    i := node.Prefix;
-    while i < bitLength do
-    begin
-      h := 8 - (i mod 8);
-      rawAddress[i shr 3] :=
-        (rawAddress[i shr 3] shr h) shl h;
-      i := ((i shr 3) shl 3) + 8;
-    end;
-    netAddress := TMMDBIPAddress.Create(rawAddress);
-    Result := Format('%s/%d,%s,%s,%s,%s,%s,%s',
-      [netAddress.ToString, node.Prefix,
-       node.Data.Continent.code, IntToStr(node.Data.Continent.GeonameId),
-       node.Data.Country.ISOCode, IntToStr(node.Data.Country.GeonameId),
-       node.Data.RegisteredCountry.ISOCode, IntToStr(node.Data.RegisteredCountry.GeonameId)]);
-  end;
-
-  function FormatIPCountryCityNode(node: TMMDBIteratorNode<TMMDBIPCountryCityInfoEx>): String;
-  var
-    netAddress: TMMDBIPAddress;
-    rawAddress: TBytes;
-    bitLength: Integer;
-    i, h: Integer;
-    cityNameEN: String;
-  begin
-    rawAddress := node.Start.GetAddressBytes;
-    bitLength := Length(rawAddress) * 8;
-    i := node.Prefix;
-    while i < bitLength do
-    begin
-      h := 8 - (i mod 8);
-      rawAddress[i shr 3] :=
-        (rawAddress[i shr 3] shr h) shl h;
-      i := ((i shr 3) shl 3) + 8;
-    end;
-    netAddress := TMMDBIPAddress.Create(rawAddress);
-    if not node.Data.City.Names.TryGetValue('en', cityNameEN) then cityNameEN := '';
-    Result := Format('%s/%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s',
-      [netAddress.ToString, node.Prefix,
-       node.Data.Continent.code, IntToStr(node.Data.Continent.GeonameId),
-       node.Data.Country.ISOCode, IntToStr(node.Data.Country.GeonameId),
-       node.Data.RegisteredCountry.ISOCode, IntToStr(node.Data.RegisteredCountry.GeonameId),
-       IntToStr(node.Data.City.GeonameId), cityNameEN,
-       IntToStr(node.Data.Location.Accuracy),
-       FloatToStrF(node.Data.Location.Latitude, ffFixed, 4, 2, fs),
-       FloatToStrF(node.Data.Location.Longitude, ffFixed, 4, 2, fs),
-       node.Data.Location.TimeZone]);
-  end;
-
 var
 //  ipInfo: TMMDBIPInfo;
 //  enumerator: IEnumerator<TMMDBIteratorNode<TMMDBIPInfo>>;
-  countryIterator: IMMDBIterator<TMMDBIPCountryInfo>;
-  cityIterator: IMMDBIterator<TMMDBIPCountryCityInfoEx>;
   displayLinesCount: Integer;
   IPv4Only: Boolean;
 begin
-  {$WARN SYMBOL_PLATFORM OFF}
-  fs := TFormatSettings.Create(GetThreadLocale());
-  {$WARN SYMBOL_PLATFORM ON}
-  fs.DecimalSeparator := '.';
   displayLinesCount := StrToInt(Edit2.Text);
   IPv4Only := CheckBox1.Checked;
   LLines := Memo1.Lines;
@@ -366,31 +425,10 @@ begin
     TestIP(DEBUG_IPv4, 'DEBUG_IP_');
     TestIP(DEBUG_IPv6, 'DEBUG_IP_');
 {$ENDIF}
-    if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
-    begin
-      LLines.Add(String.Join(',',
-        ['network','continent_code','continent_geoname_id','country_iso_code',
-        'country_geoname_id','registered_country_iso_code','registered_country_geoname_id',
-        'city_geoname_id','city_names_en','accuracy_radius','latitude',
-        'longitude','time_zone'],
-        0, 13));
-      for cityIterator in FMMDBReader.FindAll<TMMDBIPCountryCityInfoEx>(IPv4Only) do
-      begin
-        LLines.Add(FormatIPCountryCityNode(cityIterator.Node));
-        if LLines.Count >= displayLinesCount then Break;
-      end;
-    end else
-    begin
-      LLines.Add(String.Join(',',
-        ['network','continent_code','continent_geoname_id','country_iso_code',
-        'country_geoname_id','registered_country_iso_code','registered_country_geoname_id'],
-        0, 7));
-      for countryIterator in FMMDBReader.FindAll<TMMDBIPCountryInfo>(IPv4Only) do
-      begin
-        LLines.Add(FormatIPCountryNode(countryIterator.Node));
-        if LLines.Count >= displayLinesCount then Break;
-      end;
-    end;
+    MMDBFindAll(IPv4Only,
+      procedure (const ALine: String) begin LLines.Add(ALine); end,
+      displayLinesCount,
+      procedure (const ALine: String) begin LLines.Add(ALine); end);
   finally
     LLines.EndUpdate;
   end;
@@ -400,81 +438,186 @@ procedure TForm1.TestIP(const ipString, outPrefix: String);
 var
   LLines: TStrings;
   ipAddress: TMMDBIPAddress;
-  netAddress: TMMDBIPAddress;
   rawAddress: TBytes;
-  bitLength: Integer;
-  ipVersion: Integer;
   prefixLength: Integer;
   ipCountryInfo: TMMDBIPCountryInfoEx;
   ipCityInfo: TMMDBIPCountryCityInfoEx;
-  ipInfo: TMMDBIPCountryInfoEx;
+  ispInfo: TMMDBISP;
+  asnInfo: TMMDBASN;
+  anonymousInfo: TMMDBAnonymousIP;
+  domainInfo: TMMDBDomain;
   ipInfoFound: Boolean;
-  i, j, h: Integer;
-  s: String;
-  nameKey: String;
-  fs: TFormatSettings;
 begin
-  {$WARN SYMBOL_PLATFORM OFF}
-  fs := TFormatSettings.Create(GetThreadLocale());
-  {$WARN SYMBOL_PLATFORM ON}
-  fs.DecimalSeparator := '.';
   LLines := Memo1.Lines;
   ipAddress := TMMDBIPAddress.Parse(ipString);
   rawAddress := ipAddress.GetAddressBytes;
-  bitLength := Length(rawAddress) * 8;
-  if Length(rawAddress) > 4 then
-    ipVersion := 6
-  else
-    ipVersion := 4;
   ipCountryInfo := TMMDBIPCountryInfoEx.Create;
   ipCityInfo := TMMDBIPCountryCityInfoEx.Create;
+  ispInfo := TMMDBISP.Create;
+  asnInfo := TMMDBASN.Create;
+  anonymousInfo := TMMDBAnonymousIP.Create;
+  domainInfo := TMMDBDomain.Create;
   try
-    if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
-      ipInfoFound := FMMDBReader.Find<TMMDBIPCountryCityInfoEx>(ipAddress, prefixLength, ipCityInfo)
-    else
-      ipInfoFound := FMMDBReader.Find<TMMDBIPCountryInfoEx>(ipAddress, prefixLength, ipCountryInfo);
-    if ipInfoFound then
+    if EndsText('-domain', FMMDBReader.Metadata.DatabaseType) then
     begin
-      i := prefixLength;
-      while i < bitLength do
-      begin
-        h := 8 - (i mod 8);
-        rawAddress[i shr 3] :=
-          (rawAddress[i shr 3] shr h) shl h;
-        i := ((i shr 3) shl 3) + 8;
-      end;
-      netAddress := TMMDBIPAddress.Create(rawAddress);
-      if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
-        ipInfo := ipCityInfo
-      else
-        ipInfo := ipCountryInfo;
-      s := Format('%s%s=%s',
-        [outPrefix, ipString, Format(
-          'ip:{address:"%s",version:%d},network:"%s/%d",continent:{code:"%s",geoname_id:%s},country:{iso_code:"%s",geoname_id:%s},registered_country:{iso_code:"%s",geoname_id:%s}',
-          [ipAddress.ToString, ipVersion, netAddress.ToString, prefixLength, ipInfo.Continent.Code, IntToStr(ipInfo.Continent.GeonameId), ipInfo.Country.ISOCode,
-          IntToStr(ipInfo.country.GeonameId), ipInfo.registeredCountry.ISOCode, IntToStr(ipInfo.RegisteredCountry.GeonameId)])]);
-      if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
-      begin
-        s := s + Format(',city:{geoname_id:%s,names:[', [IntToStr(ipCityInfo.City.GeonameId)]);
-        j := 0;
-        for nameKey in ipCityInfo.City.Names.Keys do
-        begin
-          s := s + Format('%s%s="%s"', [IfThen(j > 0, ',', ''), nameKey, ipCityInfo.City.Names[nameKey]]);
-          Inc(j);
-        end;
-        s := s + ']}';
-        s := s + ',location:{accuracy:"' +IntToStr(ipCityInfo.Location.Accuracy)+
-          '",latitude:"'+FloatToStrF(ipCityInfo.Location.Latitude, ffFixed, 4, 2, fs)+
-          '",longitude:"'+FloatToStrF(ipCityInfo.Location.Longitude, ffFixed, 4, 2, fs)+
-          '",timezone:"'+ipCityInfo.Location.TimeZone+'"}';
-      end;
-      LLines.Add(s);
+      ipInfoFound := FMMDBReader.Find<TMMDBDomain>(ipAddress, prefixLength, domainInfo);
+      if ipInfoFound then
+        LLines.Add(Format('%s%s => ', [outPrefix, ipString]) +
+          FormatDomainInfo(NodeNetwork(rawAddress, prefixLength), domainInfo));
     end else
-      LLines.Add(Format('%s%s=%s', [outPrefix, ipString, 'NOT FOUND']));
+    if EndsText('-anonymous-ip', FMMDBReader.Metadata.DatabaseType) then
+    begin
+      ipInfoFound := FMMDBReader.Find<TMMDBAnonymousIP>(ipAddress, prefixLength, anonymousInfo);
+      if ipInfoFound then
+        LLines.Add(Format('%s%s => ', [outPrefix, ipString]) +
+          FormatAnonymousIPInfo(NodeNetwork(rawAddress, prefixLength), anonymousInfo));
+    end else
+    if EndsText('-isp', FMMDBReader.Metadata.DatabaseType) then
+    begin
+      ipInfoFound := FMMDBReader.Find<TMMDBISP>(ipAddress, prefixLength, ispInfo);
+      if ipInfoFound then
+        LLines.Add(Format('%s%s => ', [outPrefix, ipString]) +
+          FormatISPInfo(NodeNetwork(rawAddress, prefixLength), ispInfo));
+    end else
+    if EndsText('-asn', FMMDBReader.Metadata.DatabaseType) then
+    begin
+      ipInfoFound := FMMDBReader.Find<TMMDBASN>(ipAddress, prefixLength, asnInfo);
+      if ipInfoFound then
+        LLines.Add(Format('%s%s => ', [outPrefix, ipString]) +
+          FormatASNInfo(NodeNetwork(rawAddress, prefixLength), asnInfo));
+    end else
+    if EndsText('-city', FMMDBReader.Metadata.DatabaseType) then
+    begin
+      ipInfoFound := FMMDBReader.Find<TMMDBIPCountryCityInfoEx>(ipAddress, prefixLength, ipCityInfo);
+      if ipInfoFound then
+        LLines.Add(Format('%s%s => ', [outPrefix, ipString]) +
+          FormatIPCountryCityInfo(NodeNetwork(rawAddress, prefixLength), ipCityInfo));
+    end else
+    begin
+      ipInfoFound := FMMDBReader.Find<TMMDBIPCountryInfoEx>(ipAddress, prefixLength, ipCountryInfo);
+      if ipInfoFound then
+        LLines.Add(Format('%s%s => ', [outPrefix, ipString]) +
+          FormatIPCountryInfo(NodeNetwork(rawAddress, prefixLength), ipCountryInfo));
+    end;
+    if not ipInfoFound then
+      LLines.Add(Format('%s%s => %s', [outPrefix, ipString, 'NOT FOUND']));
   finally
+    domainInfo.Free;
+    anonymousInfo.Free;
+    asnInfo.Free;
+    ispInfo.Free;
     ipCityInfo.Free;
     ipCountryInfo.Free;
   end;
 end;
+
+function TForm1.EscapeString(const S: string): string;
+const
+  Delimiter: Char = ',';
+  Enclosure: Char = '"';
+begin
+  Result := StringReplace(S, Enclosure, Enclosure+Enclosure, [rfReplaceAll]);
+  if (Pos(Delimiter, S) > 0) or (Pos(Enclosure, S) > 0) then
+      Result := Enclosure + Result + Enclosure;
+end;
+
+function TForm1.Reduce(const A: array of String; L: TReduceRef): String;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := Low(A) to High(A) do
+    Result := L(Result, A, I);
+end;
+
+function TForm1.FormatRow(const columns: array of String): String;
+begin
+  //Result := String.Join(',', columns, 0, Length(columns));
+  Result := Reduce(columns,
+    function (const R: String; const A: array of String; I: Integer): String
+    begin
+      if I > Low(A) then
+        Result := Result + ',';
+      Result := Result + EscapeString(A[I]);
+    end);
+end;
+
+function TForm1.NodeNetwork(rawAddress: TBytes; nodePrefix: Integer): String;
+var
+  bitLength: Integer;
+  i, h: Integer;
+begin
+  bitLength := Length(rawAddress) * 8;
+  i := nodePrefix;
+  while i < bitLength do
+  begin
+    h := 8 - (i mod 8);
+    rawAddress[i shr 3] :=
+      (rawAddress[i shr 3] shr h) shl h;
+    i := ((i shr 3) shl 3) + 8;
+  end;
+  Result := TMMDBIPAddress.Create(rawAddress).ToString + '/' + IntToStr(nodePrefix);
+end;
+
+function TForm1.FormatIPCountryInfo(const network: String; info: TMMDBIPCountryInfoEx): String;
+begin
+  Result := FormatRow(
+    [network,
+     info.Continent.code, IntToStr(info.Continent.GeonameId),
+     info.Country.ISOCode, IntToStr(info.Country.GeonameId),
+     info.RegisteredCountry.ISOCode, IntToStr(info.RegisteredCountry.GeonameId)]);
+end;
+
+function TForm1.FormatIPCountryCityInfo(const network: String; info: TMMDBIPCountryCityInfoEx): String;
+var
+  cityNameEN: String;
+begin
+  if not info.City.Names.TryGetValue('en', cityNameEN) then cityNameEN := '';
+  Result := FormatRow(
+    [network,
+     info.Continent.code, IntToStr(info.Continent.GeonameId),
+     info.Country.ISOCode, IntToStr(info.Country.GeonameId),
+     info.RegisteredCountry.ISOCode, IntToStr(info.RegisteredCountry.GeonameId),
+     IntToStr(info.City.GeonameId), cityNameEN,
+     IntToStr(info.Location.Accuracy),
+     FloatToStrF(info.Location.Latitude, ffFixed, 4, 2, fs),
+     FloatToStrF(info.Location.Longitude, ffFixed, 4, 2, fs),
+     info.Location.TimeZone]);
+end;
+
+function TForm1.FormatISPInfo(const network: String; info: TMMDBISP): String;
+begin
+  Result := FormatRow(
+    [network,
+     info.ISP, info.Organization, IntToStr(info.AutonomousSystemNumber),
+     info.AutonomousSystemOrganization]);
+end;
+
+function TForm1.FormatASNInfo(const network: String; info: TMMDBASN): String;
+begin
+  Result := FormatRow(
+    [network,
+     IntToStr(info.AutonomousSystemNumber),
+     info.AutonomousSystemOrganization]);
+end;
+
+function TForm1.FormatDomainInfo(const network: String;
+  info: TMMDBDomain): String;
+begin
+  Result := FormatRow([network, info.Domain]);
+end;
+
+function TForm1.FormatAnonymousIPInfo(const network: String; info: TMMDBAnonymousIP): String;
+begin
+  Result := FormatRow(
+    [network,
+    BoolToStr(info.IsAnonymous, True),
+    BoolToStr(info.IsAnonymousVPN, True),
+    BoolToStr(info.IsHostingProvider, True),
+    BoolToStr(info.IsPublicProxy, True),
+    BoolToStr(info.IsResidentialProxy, True),
+    BoolToStr(info.IsTorExitNode, True)]);
+end;
+
 
 end.

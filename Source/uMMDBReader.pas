@@ -32,10 +32,16 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: January 16, 2020                                                       }
-{ Version: 1.1                                                                 }
+{ Date: July 19, 2021                                                          }
+{ Version: 1.2                                                                 }
 {                                                                              }
 { Changelog:                                                                   }
+{                                                                              }
+{ v1.2:                                                                        }
+{ - added debug macros: DEBUG_OUT, DEBUG_OUT_FILE, DEBUG_OUT_FILTER            }
+{ - changed implementation of function TMMDBDecoder.Decode:                    }
+{   call "Create" for classes; that allows to make arrays and dictionaries of  }
+{   objects.                                                                   }
 {                                                                              }
 { v1.1:                                                                        }
 { - added debug parameter: const keyPath: String                               }
@@ -52,10 +58,20 @@ interface
 uses
   System.SysUtils, System.Classes, Velthuis.BigIntegers,
   System.TypInfo, System.Generics.Collections, System.Rtti, System.DateUtils,
-  System.Contnrs, uMMDBIPAddress;
+  System.Contnrs, uMMDBIPAddress, System.SyncObjs, System.RegularExpressions;
 
 {$IFDEF DEBUG}
-{.$DEFINE DEBUG_OUT}
+{$DEFINE DEBUG_OUT}
+{$DEFINE DEBUG_OUT_FILE}
+{$DEFINE DEBUG_OUT_FILTER}
+{$ENDIF}
+
+{$IFDEF DEBUG_OUT_FILE}
+const DebugOutFile = 'mmdbread.log';
+{$ENDIF}
+
+{$IFDEF DEBUG_OUT_FILTER}
+const DebugOutFilter = 'WARNING';
 {$ENDIF}
 
 type
@@ -137,6 +153,17 @@ type
     function GetInstanceTypeMethod(instance: TRttiInstanceType; const methodName: String;
       out method: TRttiMethod; paramCount: Integer = -1): Boolean;
     function NextValueOffset(offset: Int64; numberToSkip: Integer): Int64;
+{$IFDEF DEBUG_OUT}
+    procedure DebugOutput(const S: String);
+  private
+    class var FDebugOutCS: TCriticalSection;
+    class var FDebugFileStream: TFileStream;
+{$IFDEF DEBUG_OUT_FILTER}
+    class var FDebugFilterRegEx: TRegEx;
+{$ENDIF}
+    class constructor Create;
+    class destructor Destroy;
+{$ENDIF}
   private
     FContext: TRttiContext;
     FOwnerObjects: TObjectList;
@@ -465,6 +492,21 @@ begin
   FOwnerObjects := ownerObjects;
 end;
 
+{$IFDEF DEBUG_OUT}
+class constructor TMMDBDecoder.Create;
+begin
+  FDebugOutCS := TCriticalSection.Create;
+{$IFDEF DEBUG_OUT_FILE}
+  FDebugFileStream := TFileStream.Create(ExtractFileDir(ParamStr(0)) + '\' + DebugOutFile, fmCreate or fmShareDenyWrite);
+{$ELSE}
+  FDebugFileStream := nil;
+{$ENDIF}
+{$IFDEF DEBUG_OUT_FILTER}
+  FDebugFilterRegEx := TRegEx.Create(DebugOutFilter);
+{$ENDIF}
+end;
+{$ENDIF}
+
 function TMMDBDecoder.CtrlData(offset: Int64; out size: Integer;
   out outOffset: Int64): ObjectType;
 var
@@ -512,6 +554,31 @@ begin
   Result := _type;
 end;
 
+{$IFDEF DEBUG_OUT}
+procedure TMMDBDecoder.DebugOutput(const S: String);
+{$IFDEF DEBUG_OUT_FILE}
+var
+  B: TBytes;
+{$ENDIF}
+begin
+  if Length(S) < 1 then Exit;
+{$IFDEF DEBUG_OUT_FILTER}
+  if not FDebugFilterRegEx.IsMatch(S) then Exit;
+{$ENDIF}
+{$IFDEF DEBUG_OUT_FILE}
+   FDebugOutCS.Acquire;
+   try
+     B := TEncoding.UTF8.GetBytes(S + sLineBreak);
+     FDebugFileStream.Write(B, Length(B));
+   finally
+     FDebugOutCS.Release;
+   end;
+{$ELSE}
+  OutputDebugString(PChar(S));
+{$ENDIF}
+end;
+{$ENDIF}
+
 procedure TMMDBDecoder.Decode(expectedType: PTypeInfo; offset: Int64;
   out outOffset: Int64; var valResult: TValue{$IFDEF DEBUG_OUT}; const keyPath: String{$ENDIF});
 var
@@ -536,16 +603,32 @@ function TMMDBDecoder.Decode(expectedType: PTypeInfo; offset: Int64;
 var
   _type: ObjectType;
   size: Integer;
+  expectedRttiType: TRttiType;
+  et: TRttiInstanceType;
 begin
   _type := CtrlData(offset, size, offset);
-  Result := DecodeByType(expectedType, _type, offset, size, outOffset{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
+  if expectedType.Kind = tkClass then
+  begin
+    expectedRttiType := FContext.GetType(expectedType);
+    et := expectedRttiType.AsInstance;
+    Result := et.GetMethod('Create').Invoke(et.MetaclassType, []);
+    try
+      DecodeByType(expectedType, _type, offset, size, outOffset, Result{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
+    except
+      raise;
+    end;
+  end else
+    Result := DecodeByType(expectedType, _type, offset, size, outOffset{$IFDEF DEBUG_OUT}, keyPath{$ENDIF});
 end;
 
 function TMMDBDecoder.Decode<T>(offset: Int64; out outOffset: Int64): T;
 var
+  _type: ObjectType;
+  size: Integer;
   val: TValue;
 begin
-  val := Decode(TypeInfo(T), offset, outOffset{$IFDEF DEBUG_OUT}, ''{$ENDIF});
+  _type := CtrlData(offset, size, offset);
+  val := DecodeByType(TypeInfo(T), _type, offset, size, outOffset{$IFDEF DEBUG_OUT}, ''{$ENDIF});
   Result := val.AsType<T>;
 end;
 
@@ -821,7 +904,7 @@ begin
     key := Decode(keyType, offset, offset{$IFDEF DEBUG_OUT}, keyPath + '[' + IntToStr(i) + '].key'{$ENDIF});
     val := Decode(valueType, offset, offset{$IFDEF DEBUG_OUT}, keyPath + '[' + IntToStr(i) + '].value'{$ENDIF});
 {$IFDEF DEBUG_OUT}
-    OutputDebugString(PChar(expectedRttiType.Name + '.' + key.ToString + ':' + paramValue.ParamType.Name + ' = ' + val.ToString));
+    DebugOutput(expectedRttiType.Name + '.' + key.ToString + ':' + paramValue.ParamType.Name + ' = ' + val.ToString);
 {$ENDIF}
     addMethod.Invoke(objResult, [key, val]);
   end;
@@ -869,7 +952,7 @@ begin
         if not val.IsEmpty then
         begin
 {$IFDEF DEBUG_OUT}
-          OutputDebugString(PChar(expectedRttiType.Name + '.' + prop.Name + ':' + prop.PropertyType.Name + ' = ' + val.ToString));
+          DebugOutput(expectedRttiType.Name + '.' + prop.Name + ':' + prop.PropertyType.Name + ' = ' + val.ToString);
 {$ENDIF}
           Decode(prop.PropertyType.Handle, offset, offset, val{$IFDEF DEBUG_OUT}, keyPath + '.' + key{$ENDIF});
           Continue;
@@ -879,18 +962,18 @@ begin
       begin
         val := Decode(prop.PropertyType.Handle, offset, offset{$IFDEF DEBUG_OUT}, keyPath + '.' + key{$ENDIF});
 {$IFDEF DEBUG_OUT}
-        OutputDebugString(PChar(expectedRttiType.Name + '.' + prop.Name + ':' + prop.PropertyType.Name + ' = ' + val.ToString));
+        DebugOutput(expectedRttiType.Name + '.' + prop.Name + ':' + prop.PropertyType.Name + ' = ' + val.ToString);
 {$ENDIF}
         prop.SetValue(objResult, val);
         Continue;
       end;
 {$IFDEF DEBUG_OUT}
-      OutputDebugString(PChar(expectedRttiType.Name + '.' + prop.Name + ' NOT WRITABLE'));
+      DebugOutput('WARNING: ' + expectedRttiType.Name + '.' + prop.Name + ' NOT WRITABLE');
 {$ENDIF}
     end else
     begin
 {$IFDEF DEBUG_OUT}
-      OutputDebugString(PChar(expectedRttiType.Name + ' NOT FOUND (' + keyPath + '.' + key +')'));
+      DebugOutput('WARNING: ' + expectedRttiType.Name + ' NOT FOUND (' + keyPath + '.' + key +')');
 {$ENDIF}
     end;
     offset := NextValueOffset(offset, 1);
@@ -941,6 +1024,15 @@ begin
   Result := _database.ReadULong(offset, size);
 end;
 
+{$IFDEF DEBUG_OUT}
+class destructor TMMDBDecoder.Destroy;
+begin
+  if Assigned(FDebugFileStream) then
+    FDebugFileStream.Free;
+  FDebugOutCS.Free;
+end;
+{$ENDIF}
+
 function TMMDBDecoder.GetInstanceTypeMethod(instance: TRttiInstanceType;
   const methodName: String; out method: TRttiMethod;
   paramCount: Integer): Boolean;
@@ -951,7 +1043,7 @@ begin
   if not Assigned(method) then
   begin
 {$IFDEF DEBUG_OUT}
-    OutputDebugString(PChar(instance.Name+'.'+methodName+' method does not exist.'));
+    DebugOutput(instance.Name+'.'+methodName+' method does not exist.');
 {$ENDIF}
     //raise Exception.Create(instance.Name+'.'+methodName+' method does not exist.');
     Exit(False);
@@ -962,7 +1054,7 @@ begin
     if Length(params) <> paramCount then
     begin
 {$IFDEF DEBUG_OUT}
-      OutputDebugString(PChar('Bad '+instance.Name+'.'+methodName+' parameters count.'));
+      DebugOutput('Bad '+instance.Name+'.'+methodName+' parameters count.');
 {$ENDIF}
       //raise Exception.Create('Bad '+instance.Name+'.'+methodName+' parameters count.');
       Exit(False);
