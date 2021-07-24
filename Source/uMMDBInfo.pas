@@ -38,7 +38,6 @@
 { Changelog:                                                                   }
 { v1.4:                                                                        }
 { - added TMMDBPostal                                                          }
-{ - added TMMDBPostal                                                          }
 { - added TMMDBSubdivision amd TMMDBSubdivisionEx                              }
 { - added TMMDBRepresentedCountryInfoEx                                        }
 { - added TMMDBASN                                                             }

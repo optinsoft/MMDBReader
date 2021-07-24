@@ -32,8 +32,12 @@
 { ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                                   }
 {                                                                              }
 { Last edit by: Vitaly Yakovlev                                                }
-{ Date: July 19, 2021                                                          }
-{ Version: 1.5                                                                 }
+{ Date: July 24, 2021                                                          }
+{ Version: 1.6                                                                 }
+{                                                                              }
+{ Changelog:                                                                   }
+{ v1. 6:                                                                       }
+{ - print postal_code and subdivisions                                         }
 {                                                                              }
 { Changelog:                                                                   }
 { v1. 5:                                                                       }
@@ -64,7 +68,8 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
-  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, uMMDBReader, uMMDBInfo, uMMDBIPAddress;
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, uMMDBReader, uMMDBInfo, uMMDBIPAddress,
+  System.Generics.Collections;
 
 type
   TForm1 = class(TForm)
@@ -87,7 +92,7 @@ type
     procedure FormCreate(Sender: TObject);
   private type
     TForEachLine = reference to procedure(const ALine: String);
-    TReduceRef = reference to function (const R: String; const A: array of String; I: Integer): String;
+    TArrayReduceRef = reference to function (const R: String; const A: array of String; I: Integer): String;
   private
     { Private declarations }
     FMMDBReader: TMMDBReader;
@@ -101,7 +106,8 @@ type
     procedure MMDBFindAll(AIPv4Only: Boolean; AForEachLine: TForEachLine;
       AMaxLinesCount: Integer = 0; AOnHeaderLine: TForEachLine = nil);
     function EscapeString(const S: String): String;
-    function Reduce(const A: array of String; L: TReduceRef): String;
+    function ArrayReduce(const A: array of String; const L: TArrayReduceRef): String;
+    function Reduce<T>(const A: TEnumerable<T>; const L: TFunc<String, T, String>): String;
     function FormatRow(const columns: array of String): String;
     function NodeNetwork(rawAddress: TBytes; nodePrefix: Integer): String;
     function FormatIPCountryInfo(const network: String; info: TMMDBIPCountryInfoEx): String;
@@ -120,7 +126,6 @@ var
 implementation
 
 uses
-  System.Generics.Collections,
   System.DateUtils, System.StrUtils;
 
 {$IFDEF DEBUG}
@@ -353,7 +358,7 @@ begin
         'network','continent_code','continent_geoname_id','country_iso_code',
         'country_geoname_id','registered_country_iso_code','registered_country_geoname_id',
         'city_geoname_id','city_names_en','accuracy_radius','latitude',
-        'longitude','time_zone'
+        'longitude','time_zone','postal_code','subdivisions'
       ]));
     for cityIterator in FMMDBReader.FindAll<TMMDBIPCountryCityInfoEx>(AIPv4Only) do
     begin
@@ -511,6 +516,16 @@ begin
   end;
 end;
 
+function TForm1.Reduce<T>(const A: TEnumerable<T>;
+  const L: TFunc<String, T, String>): String;
+var
+  Item: T;
+begin
+  Result := '';
+  for Item in A do
+    Result := L(Result, Item);
+end;
+
 function TForm1.EscapeString(const S: string): string;
 const
   Delimiter: Char = ',';
@@ -521,7 +536,7 @@ begin
       Result := Enclosure + Result + Enclosure;
 end;
 
-function TForm1.Reduce(const A: array of String; L: TReduceRef): String;
+function TForm1.ArrayReduce(const A: array of String; const L: TArrayReduceRef): String;
 var
   I: Integer;
 begin
@@ -533,7 +548,7 @@ end;
 function TForm1.FormatRow(const columns: array of String): String;
 begin
   //Result := String.Join(',', columns, 0, Length(columns));
-  Result := Reduce(columns,
+  Result := ArrayReduce(columns,
     function (const R: String; const A: array of String; I: Integer): String
     begin
       if I > Low(A) then
@@ -582,7 +597,19 @@ begin
      IntToStr(info.Location.Accuracy),
      FloatToStrF(info.Location.Latitude, ffFixed, 4, 2, fs),
      FloatToStrF(info.Location.Longitude, ffFixed, 4, 2, fs),
-     info.Location.TimeZone]);
+     info.Location.TimeZone,
+     info.Postal.Code,
+     Reduce<TMMDBSubdivisionEx>(info.Subdivisions,
+       function (R: String; Subdivision: TMMDBSubdivisionEx): String
+       begin
+         if Length(Result) > 0 then
+           Result := Result + ',';
+         Result := Result + Format(
+           '{geoname_id:%s,iso_code:%s,is_in_european_union:%s}',
+           [IntToStr(Subdivision.GeonameId),
+            Subdivision.ISOCode,
+            BoolToStr(Subdivision.IsInEuropeanUnion, True)]);
+       end)]);
 end;
 
 function TForm1.FormatISPInfo(const network: String; info: TMMDBISP): String;
