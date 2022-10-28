@@ -45,3 +45,7 @@ BigNumbers by Rudy Velthuis (<https://github.com/rvelthuis/DelphiBigNumbers>).
 ## Contributions
 
 MMDB Reader uses modified IPTypesX module from Albert de Weerd (included in source).
+
+## Supporting the project
+
+* [Sign up for DigitalOcean](https://m.do.co/c/0c76ba2e7552) and get $200 in credit over 60 days (referral link)
