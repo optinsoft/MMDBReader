@@ -37,6 +37,7 @@ type
   T8 = 0..7;
   TIPv4ByteArray = array[T4] of Byte;
   TIPv6WordArray = array[T8] of Word;
+  TIPv6CardinalArray = array[T4] of Cardinal;
 
   TIPv4 = packed record
     case Integer of
@@ -49,6 +50,7 @@ type
     case Integer of
       0: (H, G, F, E, D, C, B, A: Word);
       1: (Groups: TIPv6WordArray);
+      2: (Values: TIPv6CardinalArray);
   end;
 
   TCharCase = (ccUpperCase, ccLowerCase);
