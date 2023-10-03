@@ -586,6 +586,7 @@ end;
 function TForm1.FormatIPCountryCityInfo(const network: String; info: TMMDBIPCountryCityInfoEx): String;
 var
   cityNameEN: String;
+  subdivisionNameEN: String;
 begin
   if not info.City.Names.TryGetValue('en', cityNameEN) then cityNameEN := '';
   Result := FormatRow(
@@ -604,11 +605,14 @@ begin
        begin
          if Length(Result) > 0 then
            Result := Result + ',';
+         if not Subdivision.Names.TryGetValue('en', subdivisionNameEN) then
+           subdivisionNameEN := '';
          Result := Result + Format(
-           '{geoname_id:%s,iso_code:%s,is_in_european_union:%s}',
+           '{geoname_id:%s,iso_code:%s,is_in_european_union:%s,en_name:%s}',
            [IntToStr(Subdivision.GeonameId),
             Subdivision.ISOCode,
-            BoolToStr(Subdivision.IsInEuropeanUnion, True)]);
+            BoolToStr(Subdivision.IsInEuropeanUnion, True),
+            subdivisionNameEN]);
        end)]);
 end;
 
