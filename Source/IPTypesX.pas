@@ -14,8 +14,8 @@
 { Version: 1.2                                                                }
 {                                                                             }
 { Modified by Vitaly Yakovlev                                                 }
-{ Website: http://optinsoft.net/                                              }
-{ Date: October 22, 2019                                                      }
+{ Website: https://optinsoft.net/                                             }
+{ Last Modify Date: October 19, 2025                                          }
 {                                                                             }
 { *************************************************************************** }
 
@@ -24,7 +24,7 @@ unit IPTypesX;
 interface
 
 uses
-  Classes, SysUtils, StrUtils, Windows, Math;
+  Classes, SysUtils, StrUtils;
 
 const
   IPv4BitSize = SizeOf(Byte) * 4 * 8;

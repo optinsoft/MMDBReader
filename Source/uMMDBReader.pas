@@ -334,7 +334,7 @@ type
 
 implementation
 
-uses System.Math, Winapi.Windows, System.StrUtils;
+uses System.Math, System.StrUtils;
 
 type
   TMMDBArrayBuffer = class(TMMDBBuffer)
